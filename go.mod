@@ -1,4 +1,4 @@
-module github.com/flynn/noise
+module github.com/nob3rise/noise
 
 go 1.16
 

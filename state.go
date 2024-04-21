@@ -118,7 +118,7 @@ func (s *CipherState) Rekey() {
 	s.c = s.cs.Cipher(s.k)
 }
 
-type symmetricState struct {
+type SymmetricState struct {
 	CipherState
 	hasK bool
 	ck   []byte
@@ -128,7 +128,14 @@ type symmetricState struct {
 	prevH  []byte
 }
 
-func (s *symmetricState) InitializeSymmetric(handshakeName []byte) {
+func NewSymmetricState(cs CipherSuite, patternName string, pskModifier string) SymmetricState {
+	ss := SymmetricState{}
+	ss.cs = cs
+	ss.InitializeSymmetric([]byte("Noise_" + patternName + pskModifier + "_" + string(cs.Name())))
+	return ss
+}
+
+func (s *SymmetricState) InitializeSymmetric(handshakeName []byte) {
 	h := s.cs.Hash()
 	if len(handshakeName) <= h.Size() {
 		s.h = make([]byte, h.Size())
@@ -141,7 +148,7 @@ func (s *symmetricState) InitializeSymmetric(handshakeName []byte) {
 	copy(s.ck, s.h)
 }
 
-func (s *symmetricState) MixKey(dhOutput []byte) {
+func (s *SymmetricState) MixKey(dhOutput []byte) {
 	s.n = 0
 	s.hasK = true
 	var hk []byte
@@ -150,14 +157,14 @@ func (s *symmetricState) MixKey(dhOutput []byte) {
 	s.c = s.cs.Cipher(s.k)
 }
 
-func (s *symmetricState) MixHash(data []byte) {
+func (s *SymmetricState) MixHash(data []byte) {
 	h := s.cs.Hash()
 	h.Write(s.h)
 	h.Write(data)
 	s.h = h.Sum(s.h[:0])
 }
 
-func (s *symmetricState) MixKeyAndHash(data []byte) {
+func (s *SymmetricState) MixKeyAndHash(data []byte) {
 	var hk []byte
 	var temp []byte
 	s.ck, temp, hk = hkdf(s.cs.Hash, 3, s.ck[:0], temp, s.k[:0], s.ck, data)
@@ -168,7 +175,7 @@ func (s *symmetricState) MixKeyAndHash(data []byte) {
 	s.hasK = true
 }
 
-func (s *symmetricState) EncryptAndHash(out, plaintext []byte) ([]byte, error) {
+func (s *SymmetricState) EncryptAndHash(out, plaintext []byte) ([]byte, error) {
 	if !s.hasK {
 		s.MixHash(plaintext)
 		return append(out, plaintext...), nil
@@ -181,7 +188,7 @@ func (s *symmetricState) EncryptAndHash(out, plaintext []byte) ([]byte, error) {
 	return ciphertext, nil
 }
 
-func (s *symmetricState) DecryptAndHash(out, data []byte) ([]byte, error) {
+func (s *SymmetricState) DecryptAndHash(out, data []byte) ([]byte, error) {
 	if !s.hasK {
 		s.MixHash(data)
 		return append(out, data...), nil
@@ -194,7 +201,7 @@ func (s *symmetricState) DecryptAndHash(out, data []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-func (s *symmetricState) Split() (*CipherState, *CipherState) {
+func (s *SymmetricState) Split() (*CipherState, *CipherState) {
 	s1, s2 := &CipherState{cs: s.cs}, &CipherState{cs: s.cs}
 	hk1, hk2, _ := hkdf(s.cs.Hash, 2, s1.k[:0], s2.k[:0], nil, s.ck, nil)
 	copy(s1.k[:], hk1)
@@ -204,7 +211,7 @@ func (s *symmetricState) Split() (*CipherState, *CipherState) {
 	return s1, s2
 }
 
-func (s *symmetricState) Checkpoint() {
+func (s *SymmetricState) Checkpoint() {
 	if len(s.ck) > cap(s.prevCK) {
 		s.prevCK = make([]byte, len(s.ck))
 	}
@@ -218,11 +225,15 @@ func (s *symmetricState) Checkpoint() {
 	copy(s.prevH, s.h)
 }
 
-func (s *symmetricState) Rollback() {
+func (s *SymmetricState) Rollback() {
 	s.ck = s.ck[:len(s.prevCK)]
 	copy(s.ck, s.prevCK)
 	s.h = s.h[:len(s.prevH)]
 	copy(s.h, s.prevH)
+}
+
+func (s *SymmetricState) GetHash() []byte {
+	return s.h
 }
 
 // A MessagePattern is a single message or operation used in a Noise handshake.
@@ -254,7 +265,7 @@ const MaxMsgLen = 65535
 // A HandshakeState tracks the state of a Noise handshake. It may be discarded
 // after the handshake is complete.
 type HandshakeState struct {
-	ss              symmetricState
+	ss              SymmetricState
 	s               DHKey  // local static keypair
 	e               DHKey  // local ephemeral keypair
 	rs              []byte // remote party's static public key

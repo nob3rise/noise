@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/binary"
+	"fmt"
 	"hash"
 	"io"
 
@@ -125,6 +126,22 @@ func (dh25519) DH(privkey, pubkey []byte) ([]byte, error) {
 
 func (dh25519) DHLen() int     { return 32 }
 func (dh25519) DHName() string { return "25519" }
+
+// DHSECP256 is the secp256r1 ECDH function.
+var DHSECP256 DHFunc = dhsecp256{}
+
+type dhsecp256 struct{}
+
+func (dhsecp256) GenerateKeypair(rng io.Reader) (DHKey, error) {
+	return DHKey{}, fmt.Errorf("not implemented")
+}
+
+func (dhsecp256) DH(privkey, pubkey []byte) ([]byte, error) {
+	return []byte{}, fmt.Errorf("not implemented")
+}
+
+func (dhsecp256) DHLen() int     { return 32 }
+func (dhsecp256) DHName() string { return "P256" }
 
 type cipherFn struct {
 	fn   func([32]byte) Cipher
